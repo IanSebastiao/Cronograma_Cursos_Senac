@@ -12,7 +12,7 @@ class Aula {
     required this.idTurma,
     required this.data,
     required this.horario,
-    required this.status,
+    this.status = 'Agendada',
   });
 
   factory Aula.fromMap(Map<String, dynamic> map) {
