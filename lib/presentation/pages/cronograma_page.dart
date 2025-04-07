@@ -33,25 +33,21 @@ class _CronogramaPageState extends State<CronogramaPage> {
   }
 
   Future<void> _carregarCargaHorariaUc() async {
-  try {
-    final db = await DatabaseHelper.instance.database;
-    final ucs = await db.query('Unidades_Curriculares');
-    
-    setState(() {
-      _cargaHorariaUc.clear();
+    try {
+      final db = await DatabaseHelper.instance.database;
+      final ucs = await db.query('Unidades_Curriculares');
+      
       for (var uc in ucs) {
-        // Alteração aqui: 'cargahoraria' em vez de 'carga_horaria'
-        _cargaHorariaUc[uc['idUc'] as int] = (uc['cargahoraria'] ?? 0) as int;
+        _cargaHorariaUc[uc['idUc'] as int] = uc['carga_horaria'] as int;
       }
-    });
-  } catch (e) {
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Erro ao carregar carga horária: $e')),
-      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erro ao carregar carga horária: $e')),
+        );
+      }
     }
   }
-}
 
   void _carregarFeriadosBrasileiros(int ano) {
     _feriados[DateTime(ano, 1, 1)] = '🎉 Ano Novo';
@@ -141,82 +137,59 @@ class _CronogramaPageState extends State<CronogramaPage> {
   }
 
   Future<void> _adicionarAula() async {
-  if (_selectedDay == null || !mounted) return;
+    if (_selectedDay == null || !mounted) return;
 
-  try {
-    final db = await DatabaseHelper.instance.database;
-    final turmas = await db.query('Turma');
-    final ucs = await db.query('Unidades_Curriculares');
-
-    // Garante que a carga horária está carregada
-    if (_cargaHorariaUc.isEmpty) {
-      await _carregarCargaHorariaUc();
-    }
-
-    final result = await showDialog<Map<String, dynamic>>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Adicionar Nova Aula'),
-        content: AdicionarAulaDialog(
-          turmas: turmas, 
-          ucs: ucs,
-          cargaHorariaUc: _cargaHorariaUc,
-          selectedDay: _selectedDay!,
-          events: _events,
-        ),
-      ),
-    );
-
-    if (result != null && mounted) {
-      final periodo = result['periodo'] as String;
-      final idUc = result['idUc'] as int;
-      
-      // Configuração dos períodos
-      final periodoConfig = {
-        'Matutino': {'horas': 4, 'horario': '08:00-12:00'},
-        'Vespertino': {'horas': 4, 'horario': '14:00-18:00'},
-        'Noturno': {'horas': 3, 'horario': '19:00-22:00'},
-      };
-
-      final config = periodoConfig[periodo]!;
-      final horasAula = config['horas'] as int;
-      final horario = config['horario'] as String;
-
-      // Verifica se a UC existe no mapa de carga horária
-      if (!_cargaHorariaUc.containsKey(idUc)) {
-        throw Exception('Unidade Curricular não encontrada');
+    // Verificar se o dia selecionado é útil
+    if (!_isDiaUtil(_selectedDay!)) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Não é possível agendar aulas em finais de semana ou feriados')),
+        );
       }
-
-      // Atualiza a carga horária
-      setState(() {
-        _cargaHorariaUc[idUc] = (_cargaHorariaUc[idUc] ?? 0) - horasAula;
-      });
-
-      await db.insert('Aulas', {
-        'idUc': idUc,
-        'idTurma': result['idTurma'],
-        'data': DateFormat('yyyy-MM-dd').format(_selectedDay!),
-        'horario': horario,
-        'status': 'Agendada',
-      });
-      
-      await _carregarAulas();
+      return;
     }
-  } catch (e) {
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Erro ao adicionar aula: $e')),
+
+    try {
+      final db = await DatabaseHelper.instance.database;
+      final turmas = await db.query('Turma');
+      final ucs = await db.query('Unidades_Curriculares');
+
+      final result = await showDialog<Map<String, dynamic>>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Adicionar Nova Aula'),
+          content: AdicionarAulaDialog(
+            turmas: turmas, 
+            ucs: ucs,
+            cargaHorariaUc: _cargaHorariaUc,
+            selectedDay: _selectedDay!,
+            events: _events,
+          ),
+        ),
       );
-    }
-  // ignore: dead_code_catch_following_catch
-  } catch (e) {
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Erro ao adicionar aula: $e')),
-      );
+
+      if (result != null && mounted) {
+        // Atualizar carga horária restante
+        final horasAula = result['horario'] == '19:00-22:00' ? 3 : 4;
+        _cargaHorariaUc[result['idUc'] as int] = (_cargaHorariaUc[result['idUc'] as int] ?? 0) - horasAula;
+
+        await db.insert('Aulas', {
+          'idUc': result['idUc'],
+          'idTurma': result['idTurma'],
+          'data': DateFormat('yyyy-MM-dd').format(_selectedDay!),
+          'horario': result['horario'],
+          'status': 'Agendada',
+        });
+        await _carregarAulas();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erro ao adicionar aula: $e')),
+        );
+      }
     }
   }
-}
 
   Future<void> _removerAula(int idAula, int idUc, String horario) async {
     try {
@@ -321,7 +294,7 @@ class _CronogramaPageState extends State<CronogramaPage> {
                 if (snapshot.hasError || !snapshot.hasData) {
                   return const Text('Erro ao carregar dados');
                 }
-                final Map() = snapshot.data!;
+                final data = snapshot.data!;
                 final cargaRestante = _cargaHorariaUc[aula.idUc] ?? 0;
                 return Text('Carga horária restante: $cargaRestante horas');
               },
@@ -380,108 +353,116 @@ class _CronogramaPageState extends State<CronogramaPage> {
           : Column(
               children: [
                 TableCalendar(
-  firstDay: DateTime.utc(2020, 1, 1),
-  lastDay: DateTime.utc(2030, 12, 31),
-  focusedDay: _focusedDay,
-  startingDayOfWeek: StartingDayOfWeek.sunday,
-  locale: 'pt_BR',
-  headerStyle: HeaderStyle(
-    titleTextFormatter: (date, locale) =>
-        DateFormat('MMMM yyyy', 'pt_BR').format(date).toUpperCase(),
-    formatButtonVisible: false,
-    leftChevronIcon: const Icon(Icons.chevron_left),
-    rightChevronIcon: const Icon(Icons.chevron_right),
-  ),
-  daysOfWeekStyle: const DaysOfWeekStyle(
-    weekdayStyle: TextStyle(fontWeight: FontWeight.bold),
-    weekendStyle: TextStyle(
-      fontWeight: FontWeight.bold,
-      color: Colors.red,
-    ),
-  ),
-  calendarStyle: CalendarStyle(
-    weekendTextStyle: const TextStyle(color: Colors.red),
-    holidayTextStyle: TextStyle(color: Colors.red[800]),
-    markerDecoration: BoxDecoration(
-      color: Colors.blue[400],
-      shape: BoxShape.circle,
-    ),
-    todayDecoration: BoxDecoration(
-      color: Colors.orange.withOpacity(0.5),
-      shape: BoxShape.circle,
-    ),
-    selectedDecoration: const BoxDecoration(
-      color: Colors.blue,
-      shape: BoxShape.circle,
-    ),
-    todayTextStyle: const TextStyle(
-      fontWeight: FontWeight.bold,
-      color: Colors.black,
-    ),
-  ),
-  calendarBuilders: CalendarBuilders(
-    dowBuilder: (context, day) {
-      final text = DateFormat.EEEE('pt_BR').format(day);
-      return Center(
-        child: Text(
-          text,
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-            color: day.weekday == 6 || day.weekday == 7 ? Colors.red : null,
-          ),
-        ),
-      );
-    },
-    defaultBuilder: (context, date, _) {
-      final isFeriado = _isFeriado(date);
-      final isWeekend = date.weekday == 6 || date.weekday == 7;
-      final isToday = isSameDay(date, DateTime.now());
-      
-      return Container(
-        margin: const EdgeInsets.all(4),
-        decoration: BoxDecoration(
-          color: isToday 
-              ? null 
-              : isFeriado 
-                  ? Colors.red[50] 
-                  : null,
-          border: Border.all(
-            color: isToday
-                ? Colors.orange
-                : isFeriado
-                    ? Colors.red
-                    : Colors.transparent,
-            width: isToday ? 2 : 1,
-          ),
-          shape: BoxShape.circle,
-        ),
-        child: Center(
-          child: Text(
-            '${date.day}',
-            style: TextStyle(
-              color: isFeriado
-                  ? Colors.red[800]
-                  : isWeekend
-                      ? Colors.red
-                      : null,
-              fontWeight: isFeriado ? FontWeight.bold : null,
-            ),
-          ),
-        ),
-      );
-    },
-  ),
-  selectedDayPredicate: (day) => isSameDay(_selectedDay, day),
-  onDaySelected: (selectedDay, focusedDay) {
-    setState(() {
-      _selectedDay = selectedDay;
-      _focusedDay = focusedDay;
-    });
-  },
-  onFormatChanged: (format) => setState(() => _calendarFormat = format),
-  onPageChanged: (focusedDay) => _focusedDay = focusedDay,
-  eventLoader: _getEventsForDay,
-),
+                  firstDay: DateTime.utc(2020, 1, 1),
+                  lastDay: DateTime.utc(2030, 12, 31),
+                  focusedDay: _focusedDay,
+                  startingDayOfWeek: StartingDayOfWeek.sunday,
+                  locale: 'pt_BR',
+                  headerStyle: HeaderStyle(
+                    titleTextFormatter: (date, locale) =>
+                        DateFormat('MMMM yyyy', 'pt_BR')
+                            .format(date)
+                            .toUpperCase(),
+                    formatButtonVisible: false,
+                    leftChevronIcon: const Icon(Icons.chevron_left),
+                    rightChevronIcon: const Icon(Icons.chevron_right),
+                  ),
+                  daysOfWeekStyle: const DaysOfWeekStyle(
+                    weekdayStyle: TextStyle(fontWeight: FontWeight.bold),
+                    weekendStyle: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.red,
+                    ),
+                  ),
+                  calendarStyle: CalendarStyle(
+                    weekendTextStyle: const TextStyle(color: Colors.red),
+                    holidayTextStyle: TextStyle(color: Colors.red[800]),
+                    markerDecoration: BoxDecoration(
+                      color: Colors.blue[400],
+                      shape: BoxShape.circle,
+                    ),
+                    todayDecoration: const BoxDecoration(
+                      color: Colors.orange,
+                      shape: BoxShape.circle,
+                    ),
+                    selectedDecoration: const BoxDecoration(
+                      color: Colors.blue,
+                      shape: BoxShape.circle,
+                    ),
+                    outsideDaysVisible: false,
+                  ),
+                  calendarBuilders: CalendarBuilders(
+                    dowBuilder: (context, day) {
+                      final text = DateFormat.EEEE('pt_BR').format(day);
+                      return Center(
+                        child: Text(text,
+                            style: const TextStyle(fontWeight: FontWeight.bold)),
+                      );
+                    },
+                    defaultBuilder: (context, date, _) {
+                      final isFeriado = _isFeriado(date);
+                      final isDiaUtil = _isDiaUtil(date);
+                      return Container(
+                        margin: const EdgeInsets.all(4),
+                        decoration: BoxDecoration(
+                          color: isFeriado 
+                              ? Colors.red[50] 
+                              : !isDiaUtil 
+                                  ? Colors.grey[200] 
+                                  : null,
+                          border: isFeriado 
+                              ? Border.all(color: Colors.red) 
+                              : !isDiaUtil 
+                                  ? Border.all(color: Colors.grey) 
+                                  : null,
+                          shape: BoxShape.circle,
+                        ),
+                        child: Center(
+                          child: Text(
+                            '${date.day}',
+                            style: TextStyle(
+                              color: isFeriado
+                                  ? Colors.red[800]
+                                  : date.weekday == 6 || date.weekday == 7
+                                      ? Colors.red
+                                      : null,
+                              fontWeight: isFeriado ? FontWeight.bold : null,
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                    disabledBuilder: (context, date, _) {
+                      return Container(
+                        margin: const EdgeInsets.all(4),
+                        decoration: BoxDecoration(
+                          color: Colors.grey[200],
+                          shape: BoxShape.circle,
+                        ),
+                        child: Center(
+                          child: Text(
+                            '${date.day}',
+                            style: const TextStyle(color: Colors.grey),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                  selectedDayPredicate: (day) => isSameDay(_selectedDay, day),
+                  onDaySelected: (selectedDay, focusedDay) {
+                    if (_isDiaUtil(selectedDay)) {
+                      setState(() {
+                        _selectedDay = selectedDay;
+                        _focusedDay = focusedDay;
+                      });
+                    }
+                  },
+                  onFormatChanged: (format) =>
+                      setState(() => _calendarFormat = format),
+                  onPageChanged: (focusedDay) => _focusedDay = focusedDay,
+                  eventLoader: _getEventsForDay,
+                  enabledDayPredicate: (day) => _isDiaUtil(day),
+                ),
                 Expanded(child: _buildEventList()),
               ],
             ),
@@ -546,164 +527,163 @@ class AdicionarAulaDialog extends StatefulWidget {
     required this.events,
   });
 
-   @override
+  @override
   _AdicionarAulaDialogState createState() => _AdicionarAulaDialogState();
 }
 
 class _AdicionarAulaDialogState extends State<AdicionarAulaDialog> {
   int? _selectedTurmaId;
   int? _selectedUcId;
-  String _periodo = 'Matutino'; // Alterado para períodos
-  final int _cargaRestante = 0;
+  String _horario = '08:00-10:00';
+  int _cargaRestante = 0;
   List<Map<String, dynamic>> _ucsFiltradas = [];
 
-  // Mapa para converter períodos em horas
-  final Map<String, int> _periodoParaHoras = {
-    'Matutino': 4,
-    'Vespertino': 4,
-    'Noturno': 3,
-  };
-
-  // Mapa para converter períodos em horários (opcional, para armazenamento no banco)
-  final Map<String, String> _periodoParaHorario = {
-    'Matutino': '08:00-12:00',
-    'Vespertino': '14:00-18:00',
-    'Noturno': '19:00-22:00',
-  };
+  @override
+  void initState() {
+    super.initState();
+    _ucsFiltradas = widget.ucs;
+  }
 
   @override
-Widget build(BuildContext context) {
-  return SingleChildScrollView(
-    child: Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        DropdownButtonFormField<int>(
-          value: _selectedTurmaId,
-          decoration: const InputDecoration(labelText: 'Turma'),
-          items: widget.turmas
-              .map((turma) => DropdownMenuItem(
-                    value: turma['idTurma'] as int,
-                    child: Text(turma['turma'] as String),
-                  ))
-              .toList(),
-          onChanged: (value) {
-            setState(() {
-              _selectedTurmaId = value;
-              _selectedUcId = null;
-              _ucsFiltradas = widget.ucs;
-            });
-          },
-        ),
-        const SizedBox(height: 18),
-        DropdownButtonFormField<int>(
-  value: _selectedUcId,
-  decoration: const InputDecoration(labelText: 'Unidade Curricular'),
-  items: widget.ucs.map((uc) {
-    final cargaHoraria = widget.cargaHorariaUc[uc['idUc'] as int] ?? 0;
-    final horasPorAula = _periodoParaHoras[_periodo]!;
-    
-    return DropdownMenuItem(
-      value: uc['idUc'] as int,
-      child: SizedBox(
-        width: double.infinity, // Ocupa toda a largura disponível
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min, // Evita overflow
-          children: [
+  Widget build(BuildContext context) {
+    return SingleChildScrollView(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          DropdownButtonFormField<int>(
+            value: _selectedTurmaId,
+            decoration: const InputDecoration(labelText: 'Turma'),
+            items: widget.turmas
+                .map((turma) => DropdownMenuItem(
+                      value: turma['idTurma'] as int,
+                      child: Text(turma['turma'] as String),
+                    ))
+                .toList(),
+            onChanged: (value) {
+              setState(() {
+                _selectedTurmaId = value;
+                _selectedUcId = null;
+                _ucsFiltradas = widget.ucs;
+              });
+            },
+          ),
+          const SizedBox(height: 16),
+          DropdownButtonFormField<int>(
+            value: _selectedUcId,
+            decoration: const InputDecoration(labelText: 'Unidade Curricular'),
+            items: _ucsFiltradas.map((uc) {
+              final cargaHoraria = widget.cargaHorariaUc[uc['idUc'] as int] ?? 0;
+              final horasPorAula = _horario == '19:00-22:00' ? 3 : 4;
+              final podeAgendar = cargaHoraria >= horasPorAula;
+              
+              // Verificar se já existe aula para esta UC no dia selecionado
+              final jaAgendadaNoDia = widget.events[DateTime(widget.selectedDay.year, widget.selectedDay.month, widget.selectedDay.day)]?.any((aula) => aula.idUc == uc['idUc']) ?? false;
+
+              return DropdownMenuItem(
+                value: uc['idUc'] as int,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(uc['nome_uc'] as String),
+                    Text(
+                      'Carga restante: $cargaHoraria horas',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: cargaHoraria < horasPorAula ? Colors.red : Colors.grey,
+                      ),
+                    ),
+                    if (jaAgendadaNoDia)
+                      const Text(
+                        'Já possui aula neste dia',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.orange,
+                        ),
+                      ),
+                  ],
+                ),
+                enabled: podeAgendar && !jaAgendadaNoDia,
+              );
+            }).toList(),
+            onChanged: (value) {
+              setState(() {
+                _selectedUcId = value;
+                if (value != null) {
+                  _cargaRestante = widget.cargaHorariaUc[value] ?? 0;
+                }
+              });
+            },
+          ),
+          const SizedBox(height: 16),
+          DropdownButtonFormField<String>(
+            value: _horario,
+            decoration: const InputDecoration(labelText: 'Horário'),
+            items: [
+              '08:00-10:00',
+              '10:00-12:00',
+              '14:00-16:00',
+              '16:00-18:00',
+              '19:00-22:00'
+            ].map((e) {
+              final horasPorAula = e == '19:00-22:00' ? 3 : 4;
+              final podeAgendar = _selectedUcId == null ? true : (widget.cargaHorariaUc[_selectedUcId] ?? 0) >= horasPorAula;
+              
+              return DropdownMenuItem(
+                value: e,
+                child: Text(e),
+                enabled: podeAgendar,
+              );
+            }).toList(),
+            onChanged: (value) {
+              setState(() {
+                _horario = value!;
+              });
+            },
+          ),
+          if (_selectedUcId != null) ...[
+            const SizedBox(height: 16),
             Text(
-              uc['nome_uc'] as String,
-              overflow: TextOverflow.ellipsis, // Adiciona "..." se o texto for muito longo
-              maxLines: 1,
-            ),
-            const SizedBox(height: 4),
-            Text(
-              'Carga restante: $cargaHoraria horas',
-              style: TextStyle(
-                fontSize: 12,
-                color: cargaHoraria < horasPorAula ? Colors.red : Colors.grey,
-              ),
+              'Carga horária restante: ${widget.cargaHorariaUc[_selectedUcId] ?? 0} horas',
+              style: const TextStyle(fontWeight: FontWeight.bold),
             ),
           ],
-        ),
-      ),
-    );
-  }).toList(),
-  onChanged: (value) {
-    setState(() {
-      _selectedUcId = value;
-    });
-  },
-),
-        const SizedBox(height: 16),
-        DropdownButtonFormField<String>(
-          value: _periodo,
-          decoration: const InputDecoration(labelText: 'Período'),
-          items: ['Matutino', 'Vespertino', 'Noturno'].map((periodo) {
-            final horasPorAula = _periodoParaHoras[periodo]!;
-            final podeAgendar = _selectedUcId == null 
-                ? true 
-                : (widget.cargaHorariaUc[_selectedUcId] ?? 0) >= horasPorAula;
-            
-            return DropdownMenuItem(
-              value: periodo,
-              enabled: podeAgendar,
-              child: Text(periodo),
-            );
-          }).toList(),
-          onChanged: (value) {
-            setState(() {
-              _periodo = value!;
-            });
-          },
-        ),
-        if (_selectedUcId != null) ...[
-          const SizedBox(height: 16),
-          Text(
-            'Carga horária restante: ${widget.cargaHorariaUc[_selectedUcId] ?? 0} horas',
-            style: const TextStyle(fontWeight: FontWeight.bold),
-          ),
-          Text(
-            'Horas por aula: ${_periodoParaHoras[_periodo]} horas',
-            style: const TextStyle(fontSize: 14, color: Colors.grey),
+          const SizedBox(height: 24),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cancelar'),
+              ),
+              const SizedBox(width: 8),
+              ElevatedButton(
+                onPressed: _podeSalvar() ? () {
+                  final horasPorAula = _horario == '19:00-22:00' ? 3 : 4;
+                  if (_selectedUcId != null && (widget.cargaHorariaUc[_selectedUcId] ?? 0) >= horasPorAula) {
+                    Navigator.pop(context, {
+                      'idTurma': _selectedTurmaId,
+                      'idUc': _selectedUcId,
+                      'horario': _horario,
+                    });
+                  }
+                } : null,
+                child: const Text('Salvar'),
+              ),
+            ],
           ),
         ],
-        const SizedBox(height: 24),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.end,
-          children: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancelar'),
-            ),
-            const SizedBox(width: 8),
-            ElevatedButton(
-              onPressed: _podeSalvar() ? () {
-                final horasPorAula = _periodoParaHoras[_periodo]!;
-                if (_selectedUcId != null && (widget.cargaHorariaUc[_selectedUcId] ?? 0) >= horasPorAula) {
-                  Navigator.pop(context, {
-                    'idTurma': _selectedTurmaId,
-                    'idUc': _selectedUcId,
-                    'periodo': _periodo,
-                  });
-                }
-              } : null,
-              child: const Text('Salvar'),
-            ),
-          ],
-        ),
-      ],
-    ),
-  );
-}
+      ),
+    );
+  }
 
   bool _podeSalvar() {
     if (_selectedTurmaId == null || _selectedUcId == null) return false;
     
-    final horasPorAula = _periodoParaHoras[_periodo]!;
+    final horasPorAula = _horario == '19:00-22:00' ? 3 : 4;
     final cargaDisponivel = widget.cargaHorariaUc[_selectedUcId] ?? 0;
     
-    final jaAgendadaNoDia = widget.events[DateTime(widget.selectedDay.year, widget.selectedDay.month, widget.selectedDay.day)]
-        ?.any((aula) => aula.idUc == _selectedUcId) ?? false;
+    // Verificar se já existe aula para esta UC no dia selecionado
+    final jaAgendadaNoDia = widget.events[DateTime(widget.selectedDay.year, widget.selectedDay.month, widget.selectedDay.day)]?.any((aula) => aula.idUc == _selectedUcId) ?? false;
     
     return cargaDisponivel >= horasPorAula && !jaAgendadaNoDia;
   }

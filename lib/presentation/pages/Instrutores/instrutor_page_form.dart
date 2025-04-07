@@ -4,6 +4,34 @@ import 'package:cronograma/presentation/pages/Instrutores/instrutores_edit_page.
     show EditInstrutorPage;
 import 'package:cronograma/presentation/viewmodels/estagio_viewmodels.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+
+class TelefoneInputFormatter extends TextInputFormatter {
+  @override
+  TextEditingValue formatEditUpdate(
+      TextEditingValue oldValue, TextEditingValue newValue) {
+    
+    final text = newValue.text.replaceAll(RegExp(r'[^\d]'), '');
+    String formatted = '';
+
+    if (text.isNotEmpty) {
+      if (text.length <= 2) {
+        formatted = '($text';
+      } else if (text.length <= 3) {
+        formatted = '(${text.substring(0, 2)}) ${text.substring(2)}';
+      } else if (text.length <= 7) {
+        formatted = '(${text.substring(0, 2)}) ${text.substring(2, 3)} ${text.substring(3)}';
+      } else if (text.length <= 11) {
+        formatted = '(${text.substring(0, 2)}) ${text.substring(2, 3)} ${text.substring(3, 7)} ${text.substring(7)}';
+      }
+    }
+
+    return TextEditingValue(
+      text: formatted,
+      selection: TextSelection.collapsed(offset: formatted.length),
+    );
+  }
+}
 
 class CadastroInstrutorPage extends StatefulWidget {
   const CadastroInstrutorPage({super.key});
@@ -17,6 +45,7 @@ class _CadastroInstrutorPageState extends State<CadastroInstrutorPage> {
   final TextEditingController _nomeController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _telefoneController = TextEditingController();
+  final TextEditingController _especializacaoController = TextEditingController();
   final InstrutoresViewModel _viewModel =
       InstrutoresViewModel(InstrutoresRepository());
   bool _isLoading = false;
@@ -35,7 +64,16 @@ class _CadastroInstrutorPageState extends State<CadastroInstrutorPage> {
     _nomeController.dispose();
     _emailController.dispose();
     _telefoneController.dispose();
+    _especializacaoController.dispose();
     super.dispose();
+  }
+
+  String _formatarTelefoneExibicao(String telefone) {
+    final digits = telefone.replaceAll(RegExp(r'[^\d]'), '');
+    if (digits.length >= 11) {
+      return '(${digits.substring(0, 2)}) ${digits.substring(2, 3)} ${digits.substring(3, 7)}-${digits.substring(7, 11)}';
+    }
+    return telefone;
   }
 
   Future<void> _carregarInstrutores() async {
@@ -67,7 +105,8 @@ class _CadastroInstrutorPageState extends State<CadastroInstrutorPage> {
       final instrutor = Instrutores(
         nomeInstrutor: _nomeController.text,
         email: _emailController.text,
-        telefone: _telefoneController.text,
+        telefone: _telefoneController.text.replaceAll(RegExp(r'[^\d]'), ''),
+        especializacao: _especializacaoController.text,
       );
 
       await _viewModel.addInstrutor(instrutor);
@@ -86,6 +125,7 @@ class _CadastroInstrutorPageState extends State<CadastroInstrutorPage> {
       _nomeController.clear();
       _emailController.clear();
       _telefoneController.clear();
+      _especializacaoController.clear();
       await _carregarInstrutores();
     } catch (e) {
       if (!mounted) return;
@@ -244,10 +284,29 @@ class _CadastroInstrutorPageState extends State<CadastroInstrutorPage> {
                           const SizedBox(height: 20),
                           TextFormField(
                             controller: _telefoneController,
+                            keyboardType: TextInputType.phone,
+                            inputFormatters: [
+                              FilteringTextInputFormatter.digitsOnly,
+                              TelefoneInputFormatter(),
+                              LengthLimitingTextInputFormatter(16), // (XX) X XXXX XXXX = 16 caracteres
+                            ],
                             decoration: InputDecoration(
-                              labelText: 'Telefone',
+                              labelText: 'Telefone Celular',
+                              hintText: '(99) 9 9999 9999', // Hint sem hífen
+                              prefixIcon: Icon(Icons.phone, color: colorScheme.primary),
+                              border: const OutlineInputBorder(),
+                              focusedBorder: OutlineInputBorder(
+                                borderSide: BorderSide(color: colorScheme.primary),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 20),
+                          TextFormField(
+                            controller: _especializacaoController,
+                            decoration: InputDecoration(
+                              labelText: 'Especialização',
                               prefixIcon:
-                                  Icon(Icons.phone, color: colorScheme.primary),
+                                  Icon(Icons.school, color: colorScheme.primary),
                               border: const OutlineInputBorder(),
                               focusedBorder: OutlineInputBorder(
                                 borderSide:
@@ -329,7 +388,12 @@ class _CadastroInstrutorPageState extends State<CadastroInstrutorPage> {
                                         Text('Email: ${instrutor.email}'),
                                       if (instrutor.telefone != null &&
                                           instrutor.telefone!.isNotEmpty)
-                                        Text('Telefone: ${instrutor.telefone}'),
+                                        Text(
+                                            'Telefone: ${_formatarTelefoneExibicao(instrutor.telefone!)}'),
+                                      if (instrutor.especializacao != null &&
+                                          instrutor.especializacao!.isNotEmpty)
+                                        Text(
+                                            'Especialização: ${instrutor.especializacao}'),
                                     ],
                                   ),
                                   trailing: Row(

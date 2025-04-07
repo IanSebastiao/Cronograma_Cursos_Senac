@@ -43,19 +43,15 @@ class MainHomePage extends StatelessWidget {
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         // Logo e título
-                        Column(
+                        const Column(
                           children: [
-                            Image.asset(
-                              'images/senac_logo.png',
-                              height: 80,
-                              errorBuilder: (context, error, stackTrace) => const Icon(
-                                Icons.school,
-                                size: 60,
-                                color: Colors.teal,
-                              ),
+                            Icon(
+                              Icons.school,
+                              size: 60,
+                              color: Colors.teal,
                             ),
-                            const SizedBox(height: 10),
-                            const Text(
+                            SizedBox(height: 10),
+                            Text(
                               'SENAC Catalão',
                               style: TextStyle(
                                 fontSize: 22,
@@ -63,7 +59,7 @@ class MainHomePage extends StatelessWidget {
                                 color: Colors.teal,
                               ),
                             ),
-                            const Text(
+                            Text(
                               'Gestão de Cronogramas',
                               style: TextStyle(
                                 fontSize: 16,

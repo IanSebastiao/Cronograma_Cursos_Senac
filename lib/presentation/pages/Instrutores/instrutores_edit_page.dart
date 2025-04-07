@@ -2,6 +2,34 @@ import 'package:cronograma/data/models/instrutores_model.dart';
 import 'package:cronograma/data/repositories/instrutor_repository.dart';
 import 'package:cronograma/presentation/viewmodels/estagio_viewmodels.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+
+class TelefoneInputFormatter extends TextInputFormatter {
+  @override
+  TextEditingValue formatEditUpdate(
+      TextEditingValue oldValue, TextEditingValue newValue) {
+    
+    final text = newValue.text.replaceAll(RegExp(r'[^\d]'), '');
+    String formatted = '';
+
+    if (text.isNotEmpty) {
+      if (text.length <= 2) {
+        formatted = '($text';
+      } else if (text.length <= 3) {
+        formatted = '(${text.substring(0, 2)}) ${text.substring(2)}';
+      } else if (text.length <= 7) {
+        formatted = '(${text.substring(0, 2)}) ${text.substring(2, 3)} ${text.substring(3)}';
+      } else if (text.length <= 11) {
+        formatted = '(${text.substring(0, 2)}) ${text.substring(2, 3)} ${text.substring(3, 7)} ${text.substring(7)}';
+      }
+    }
+
+    return TextEditingValue(
+      text: formatted,
+      selection: TextSelection.collapsed(offset: formatted.length),
+    );
+  }
+}
 
 class EditInstrutorPage extends StatefulWidget {
   final Instrutores instrutor;
@@ -17,19 +45,25 @@ class _EditInstrutorPageState extends State<EditInstrutorPage> {
   late final TextEditingController _nomeController;
   late final TextEditingController _emailController;
   late final TextEditingController _telefoneController;
-  final InstrutoresViewModel _viewModel =
-      InstrutoresViewModel(InstrutoresRepository());
+  late final TextEditingController _especializacaoController;
+  final InstrutoresViewModel _viewModel = InstrutoresViewModel(InstrutoresRepository());
   bool _isLoading = false;
 
   @override
   void initState() {
     super.initState();
-    _nomeController =
-        TextEditingController(text: widget.instrutor.nomeInstrutor);
-    _emailController =
-        TextEditingController(text: widget.instrutor.email ?? '');
-    _telefoneController =
-        TextEditingController(text: widget.instrutor.telefone ?? '');
+    _nomeController = TextEditingController(text: widget.instrutor.nomeInstrutor);
+    _emailController = TextEditingController(text: widget.instrutor.email ?? '');
+    _telefoneController = TextEditingController(text: _formatarTelefoneInicial(widget.instrutor.telefone ?? ''));
+    _especializacaoController = TextEditingController(text: widget.instrutor.especializacao ?? '');
+  }
+
+  String _formatarTelefoneInicial(String telefone) {
+    final digits = telefone.replaceAll(RegExp(r'[^\d]'), '');
+    if (digits.length >= 11) {
+      return '(${digits.substring(0, 2)}) ${digits.substring(2, 3)} ${digits.substring(3, 7)} ${digits.substring(7)}';
+    }
+    return telefone;
   }
 
   @override
@@ -37,6 +71,7 @@ class _EditInstrutorPageState extends State<EditInstrutorPage> {
     _nomeController.dispose();
     _emailController.dispose();
     _telefoneController.dispose();
+    _especializacaoController.dispose();
     super.dispose();
   }
 
@@ -50,7 +85,8 @@ class _EditInstrutorPageState extends State<EditInstrutorPage> {
         idInstrutor: widget.instrutor.idInstrutor,
         nomeInstrutor: _nomeController.text,
         email: _emailController.text,
-        telefone: _telefoneController.text,
+        telefone: _telefoneController.text.replaceAll(RegExp(r'[^\d]'), ''),
+        especializacao: _especializacaoController.text,
       );
 
       await _viewModel.updateInstrutor(instrutorAtualizado);
@@ -127,8 +163,7 @@ class _EditInstrutorPageState extends State<EditInstrutorPage> {
                         controller: _nomeController,
                         decoration: InputDecoration(
                           labelText: 'Nome Completo',
-                          prefixIcon:
-                              Icon(Icons.person, color: colorScheme.primary),
+                          prefixIcon: Icon(Icons.person, color: colorScheme.primary),
                           border: const OutlineInputBorder(),
                           focusedBorder: OutlineInputBorder(
                             borderSide: BorderSide(color: colorScheme.primary),
@@ -146,8 +181,7 @@ class _EditInstrutorPageState extends State<EditInstrutorPage> {
                         controller: _emailController,
                         decoration: InputDecoration(
                           labelText: 'Email',
-                          prefixIcon:
-                              Icon(Icons.email, color: colorScheme.primary),
+                          prefixIcon: Icon(Icons.email, color: colorScheme.primary),
                           border: const OutlineInputBorder(),
                           focusedBorder: OutlineInputBorder(
                             borderSide: BorderSide(color: colorScheme.primary),
@@ -157,10 +191,28 @@ class _EditInstrutorPageState extends State<EditInstrutorPage> {
                       const SizedBox(height: 20),
                       TextFormField(
                         controller: _telefoneController,
+                        keyboardType: TextInputType.phone,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly,
+                          TelefoneInputFormatter(),
+                          LengthLimitingTextInputFormatter(16),
+                        ],
                         decoration: InputDecoration(
-                          labelText: 'Telefone',
-                          prefixIcon:
-                              Icon(Icons.phone, color: colorScheme.primary),
+                          labelText: 'Telefone Celular',
+                          hintText: '(99) 9 9999 9999',
+                          prefixIcon: Icon(Icons.phone, color: colorScheme.primary),
+                          border: const OutlineInputBorder(),
+                          focusedBorder: OutlineInputBorder(
+                            borderSide: BorderSide(color: colorScheme.primary),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      TextFormField(
+                        controller: _especializacaoController,
+                        decoration: InputDecoration(
+                          labelText: 'Especialização',
+                          prefixIcon: Icon(Icons.school, color: colorScheme.primary),
                           border: const OutlineInputBorder(),
                           focusedBorder: OutlineInputBorder(
                             borderSide: BorderSide(color: colorScheme.primary),
