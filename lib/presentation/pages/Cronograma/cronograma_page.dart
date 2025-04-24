@@ -3,6 +3,7 @@
 import 'package:cronograma/data/models/aula_model.dart';
 import 'package:cronograma/widgets/adicionar_aula_dialog.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:table_calendar/table_calendar.dart';
 import 'package:intl/intl.dart';
 import 'package:cronograma/core/database_helper.dart';
@@ -133,12 +134,13 @@ class _CronogramaPageState extends State<CronogramaPage> {
     try {
       final db = await DatabaseHelper.instance.database;
       final ucs = await db.query('Unidades_Curriculares');
-      
+
       if (mounted) {
         setState(() {
           _cargaHorariaUc.clear();
           for (var uc in ucs) {
-            _cargaHorariaUc[uc['idUc'] as int] = (uc['cargahoraria'] ?? 0) as int;
+            _cargaHorariaUc[uc['idUc'] as int] =
+                (uc['cargahoraria'] ?? 0) as int;
           }
         });
       }
@@ -164,18 +166,21 @@ class _CronogramaPageState extends State<CronogramaPage> {
   Future<void> _adicionarAula() async {
     try {
       if ((_selectedDays.isEmpty && _selectedDay == null) || !mounted) return;
-      
-      final diasParaAgendar = _selectedDays.isNotEmpty 
-          ? _selectedDays 
-          : {_selectedDay!};
 
-      final diasInvalidos = diasParaAgendar.where((day) => !_isDiaUtil(day)).toList();
-      
+      final diasParaAgendar =
+          _selectedDays.isNotEmpty ? _selectedDays : {_selectedDay!};
+
+      final diasInvalidos =
+          diasParaAgendar.where((day) => !_isDiaUtil(day)).toList();
+
       if (diasInvalidos.isNotEmpty) {
-        final formatados = diasInvalidos.map((d) => DateFormat('dd/MM').format(d)).join(', ');
+        final formatados =
+            diasInvalidos.map((d) => DateFormat('dd/MM').format(d)).join(', ');
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Não é possível agendar em finais de semana ou feriados: $formatados')),
+            SnackBar(
+                content: Text(
+                    'Não é possível agendar em finais de semana ou feriados: $formatados')),
           );
         }
         return;
@@ -211,7 +216,8 @@ class _CronogramaPageState extends State<CronogramaPage> {
 
       final cargaTotalNecessaria = horasAula * diasSelecionados.length;
       if ((_cargaHorariaUc[idUc] ?? 0) < cargaTotalNecessaria) {
-        throw Exception('Carga horária insuficiente para esta UC. Necessário: $cargaTotalNecessaria horas');
+        throw Exception(
+            'Carga horária insuficiente para esta UC. Necessário: $cargaTotalNecessaria horas');
       }
 
       final batch = db.batch();
@@ -228,7 +234,8 @@ class _CronogramaPageState extends State<CronogramaPage> {
       await batch.commit();
 
       setState(() {
-        _cargaHorariaUc[idUc] = (_cargaHorariaUc[idUc] ?? 0) - cargaTotalNecessaria;
+        _cargaHorariaUc[idUc] =
+            (_cargaHorariaUc[idUc] ?? 0) - cargaTotalNecessaria;
       });
 
       await db.update(
@@ -242,9 +249,11 @@ class _CronogramaPageState extends State<CronogramaPage> {
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('${diasSelecionados.length} aulas agendadas com sucesso!')),
+          SnackBar(
+              content: Text(
+                  '${diasSelecionados.length} aulas agendadas com sucesso!')),
         );
-        
+
         setState(() {
           _selectedDays.clear();
           _selectedDay = null;
@@ -259,7 +268,8 @@ class _CronogramaPageState extends State<CronogramaPage> {
     }
   }
 
-  Future<void> _removerAula(int idAula, int idUc, String horario, int horas) async {
+  Future<void> _removerAula(
+      int idAula, int idUc, String horario, int horas) async {
     try {
       final db = await DatabaseHelper.instance.database;
       final aula = await db.query(
@@ -274,12 +284,13 @@ class _CronogramaPageState extends State<CronogramaPage> {
       }
 
       await db.delete('Aulas', where: 'idAula = ?', whereArgs: [idAula]);
-      
-      final horasParaRestaurar = aula.first['horas'] as int? ?? 
-          (horario == '19:00-22:00' ? 3 : 4);
-      
+
+      final horasParaRestaurar =
+          aula.first['horas'] as int? ?? (horario == '19:00-22:00' ? 3 : 4);
+
       setState(() {
-        _cargaHorariaUc[idUc] = (_cargaHorariaUc[idUc] ?? 0) + horasParaRestaurar;
+        _cargaHorariaUc[idUc] =
+            (_cargaHorariaUc[idUc] ?? 0) + horasParaRestaurar;
       });
 
       await db.update(
@@ -293,7 +304,8 @@ class _CronogramaPageState extends State<CronogramaPage> {
         await _carregarAulas();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Aula removida com sucesso! ($horasParaRestaurar horas restauradas)'),
+            content: Text(
+                'Aula removida com sucesso! ($horasParaRestaurar horas restauradas)'),
             duration: const Duration(seconds: 2),
           ),
         );
@@ -320,11 +332,44 @@ class _CronogramaPageState extends State<CronogramaPage> {
   }
 
   Widget _buildEventList() {
-    if (_selectedDay == null) return const SizedBox();
+    if (_selectedDay == null && _selectedDays.isEmpty) return const SizedBox();
 
-    final events = _getEventsForDay(_selectedDay!);
-    final feriado = _getFeriadoForDay(_selectedDay!);
+    // Se apenas um dia está selecionado
+    if (_selectedDay != null && _selectedDays.isEmpty) {
+      final events = _getEventsForDay(_selectedDay!);
+      final feriado = _getFeriadoForDay(_selectedDay!);
 
+      return _buildDayEvents(_selectedDay!, events, feriado);
+    }
+
+    // Se múltiplos dias estão selecionados
+    return ListView(
+      children: _selectedDays.map((day) {
+        final events = _getEventsForDay(day);
+        final feriado = _getFeriadoForDay(day);
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(8.0),
+              child: Text(
+                DateFormat('EEEE, dd/MM', 'pt_BR').format(day),
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                ),
+              ),
+            ),
+            _buildDayEvents(day, events, feriado),
+            const Divider(),
+          ],
+        );
+      }).toList(),
+    );
+  }
+
+  Widget _buildDayEvents(DateTime day, List<Aula> events, String? feriado) {
     return Column(
       children: [
         if (feriado != null)
@@ -403,7 +448,8 @@ class _CronogramaPageState extends State<CronogramaPage> {
         ),
         trailing: IconButton(
           icon: const Icon(Icons.delete, color: Colors.red),
-          onPressed: () => _removerAula(aula.idAula!, aula.idUc, aula.horario, aula.horas),
+          onPressed: () =>
+              _removerAula(aula.idAula!, aula.idUc, aula.horario, aula.horas),
         ),
       ),
     );
@@ -470,8 +516,10 @@ class _CronogramaPageState extends State<CronogramaPage> {
                               leading: const Icon(Icons.celebration),
                               title: Text(e.value),
                               subtitle: Text(
-                                DateFormat('EEEE, dd/MM/yyyy', 'pt_BR').format(e.key),
-                                style: const TextStyle(fontWeight: FontWeight.bold),
+                                DateFormat('EEEE, dd/MM/yyyy', 'pt_BR')
+                                    .format(e.key),
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.bold),
                               ),
                             ))
                         .toList(),
@@ -502,26 +550,44 @@ class _CronogramaPageState extends State<CronogramaPage> {
                   lastDay: DateTime.utc(2030, 12, 31),
                   focusedDay: _focusedDay,
                   selectedDayPredicate: (day) {
-                    return _selectedDays.contains(day) || isSameDay(_selectedDay, day);
+                    return _selectedDays.contains(day) ||
+                        isSameDay(_selectedDay, day);
                   },
                   onDaySelected: (selectedDay, focusedDay) {
                     setState(() {
                       _focusedDay = focusedDay;
-                      if (WidgetsBinding.instance.window.viewInsets.bottom > 0) {
-                        _selectedDays.clear();
-                        _selectedDay = selectedDay;
-                      } else {
+
+                      // Verifica se Shift ou Ctrl está pressionado (para multi-seleção)
+                      final isShiftPressed = HardwareKeyboard
+                          .instance.logicalKeysPressed
+                          .any((key) =>
+                              key == LogicalKeyboardKey.shiftLeft ||
+                              key == LogicalKeyboardKey.shiftRight);
+                      final isCtrlPressed = HardwareKeyboard
+                          .instance.logicalKeysPressed
+                          .any((key) =>
+                              key == LogicalKeyboardKey.controlLeft ||
+                              key == LogicalKeyboardKey.controlRight);
+
+                      if (isShiftPressed || isCtrlPressed) {
+                        // Modo de seleção múltipla
                         if (_selectedDays.contains(selectedDay)) {
                           _selectedDays.remove(selectedDay);
                         } else {
                           _selectedDays.add(selectedDay);
                         }
-                        _selectedDay = null;
+                        _selectedDay = null; // Limpa seleção única
+                      } else {
+                        // Modo de visualização (seleção única)
+                        _selectedDays.clear();
+                        _selectedDay = selectedDay;
                       }
-                                        });
+                    });
                   },
-                  onFormatChanged: (format) => setState(() => _calendarFormat = format),
-                  onPageChanged: (focusedDay) => setState(() => _focusedDay = focusedDay),
+                  onFormatChanged: (format) =>
+                      setState(() => _calendarFormat = format),
+                  onPageChanged: (focusedDay) =>
+                      setState(() => _focusedDay = focusedDay),
                   eventLoader: _getEventsForDay,
                   calendarStyle: CalendarStyle(
                     weekendTextStyle: const TextStyle(color: Colors.red),
@@ -546,7 +612,9 @@ class _CronogramaPageState extends State<CronogramaPage> {
                   ),
                   headerStyle: HeaderStyle(
                     titleTextFormatter: (date, locale) =>
-                        DateFormat('MMMM yyyy', 'pt_BR').format(date).toUpperCase(),
+                        DateFormat('MMMM yyyy', 'pt_BR')
+                            .format(date)
+                            .toUpperCase(),
                     formatButtonVisible: false,
                     leftChevronIcon: const Icon(Icons.chevron_left),
                     rightChevronIcon: const Icon(Icons.chevron_right),
@@ -571,7 +639,9 @@ class _CronogramaPageState extends State<CronogramaPage> {
                           text,
                           style: TextStyle(
                             fontWeight: FontWeight.bold,
-                            color: day.weekday == 6 || day.weekday == 7 ? Colors.red : null,
+                            color: day.weekday == 6 || day.weekday == 7
+                                ? Colors.red
+                                : null,
                           ),
                         ),
                       );
@@ -580,15 +650,16 @@ class _CronogramaPageState extends State<CronogramaPage> {
                       final isFeriado = _isFeriado(date);
                       final isWeekend = date.weekday == 6 || date.weekday == 7;
                       final isToday = isSameDay(date, DateTime.now());
-                      final isSelected = _selectedDays.contains(date) || isSameDay(_selectedDay, date);
-                      
+                      final isSelected = _selectedDays.contains(date) ||
+                          isSameDay(_selectedDay, date);
+
                       return Container(
                         margin: const EdgeInsets.all(4),
                         decoration: BoxDecoration(
-                          color: isToday 
+                          color: isToday
                               ? Colors.orange.withOpacity(0.3)
-                              : isFeriado 
-                                  ? Colors.red[50] 
+                              : isFeriado
+                                  ? Colors.red[50]
                                   : isSelected
                                       ? Colors.blue[100]
                                       : null,
@@ -615,7 +686,9 @@ class _CronogramaPageState extends State<CronogramaPage> {
                                       : isSelected
                                           ? Colors.blue[900]
                                           : null,
-                              fontWeight: isFeriado || isSelected ? FontWeight.bold : null,
+                              fontWeight: isFeriado || isSelected
+                                  ? FontWeight.bold
+                                  : null,
                             ),
                           ),
                         ),
@@ -623,7 +696,6 @@ class _CronogramaPageState extends State<CronogramaPage> {
                     },
                   ),
                 ),
-                
                 if (_selectedDays.isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.symmetric(vertical: 8),
@@ -635,7 +707,6 @@ class _CronogramaPageState extends State<CronogramaPage> {
                       ),
                     ),
                   ),
-                
                 Expanded(
                   child: _buildEventList(),
                 ),
