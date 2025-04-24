@@ -1,7 +1,7 @@
 // ignore_for_file: library_private_types_in_public_api, unused_field, use_build_context_synchronously
 
 import 'package:cronograma/data/models/aula_model.dart';
-import 'package:cronograma/widgets/adicionar_aula_dialog.dart';
+import 'package:cronograma/presentation/pages/Cronograma/agendar_aulas_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:table_calendar/table_calendar.dart';
@@ -186,78 +186,30 @@ class _CronogramaPageState extends State<CronogramaPage> {
         return;
       }
 
-      final db = await DatabaseHelper.instance.database;
-      final turmas = await db.query('Turma');
-      final ucs = await db.query('Unidades_Curriculares');
-
-      final result = await showDialog<Map<String, dynamic>>(
-        context: context,
-        builder: (context) => AdicionarAulaDialog(
-          turmas: turmas,
-          ucs: ucs,
-          cargaHorariaUc: _cargaHorariaUc,
-          selectedDays: diasParaAgendar,
-          events: _events,
-          periodoConfig: _periodoConfig,
+      final result = await Navigator.push<bool>(
+        context,
+        MaterialPageRoute(
+          builder: (context) => AgendarAulasPage(
+            selectedDays: diasParaAgendar,
+            periodoConfig: _periodoConfig,
+          ),
         ),
       );
 
-      if (result == null || !mounted) return;
+      if (result == true) {
+        // Recarrega os dados se as aulas foram salvas com sucesso
+        await _carregarAulas();
+        await _carregarCargaHorariaUc();
 
-      final periodo = result['periodo'] as String;
-      final idUc = result['idUc'] as int;
-      final horasAula = result['horas'] as int;
-      final diasSelecionados = result['dias'] as Set<DateTime>;
-      final horario = _periodoConfig[periodo]!['horario'] as String;
-
-      if (!_cargaHorariaUc.containsKey(idUc)) {
-        throw Exception('Unidade Curricular não encontrada');
-      }
-
-      final cargaTotalNecessaria = horasAula * diasSelecionados.length;
-      if ((_cargaHorariaUc[idUc] ?? 0) < cargaTotalNecessaria) {
-        throw Exception(
-            'Carga horária insuficiente para esta UC. Necessário: $cargaTotalNecessaria horas');
-      }
-
-      final batch = db.batch();
-      for (final dia in diasSelecionados) {
-        batch.insert('Aulas', {
-          'idUc': idUc,
-          'idTurma': result['idTurma'],
-          'data': DateFormat('yyyy-MM-dd').format(dia),
-          'horario': horario,
-          'status': 'Agendada',
-          'horas': horasAula,
-        });
-      }
-      await batch.commit();
-
-      setState(() {
-        _cargaHorariaUc[idUc] =
-            (_cargaHorariaUc[idUc] ?? 0) - cargaTotalNecessaria;
-      });
-
-      await db.update(
-        'Unidades_Curriculares',
-        {'cargahoraria': _cargaHorariaUc[idUc]},
-        where: 'idUc = ?',
-        whereArgs: [idUc],
-      );
-
-      await _carregarAulas();
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-              content: Text(
-                  '${diasSelecionados.length} aulas agendadas com sucesso!')),
-        );
-
-        setState(() {
-          _selectedDays.clear();
-          _selectedDay = null;
-        });
+        if (mounted) {
+          setState(() {
+            _selectedDays.clear();
+            _selectedDay = null;
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Aulas agendadas com sucesso!')),
+          );
+        }
       }
     } catch (e) {
       if (mounted) {
