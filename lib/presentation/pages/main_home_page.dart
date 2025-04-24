@@ -1,7 +1,7 @@
 // ignore_for_file: deprecated_member_use
 
 import 'package:cronograma/presentation/pages/Unidades%20Curriculares/unidades_curriculares_form.dart';
-import 'package:cronograma/presentation/pages/cronograma_page.dart';
+import 'package:cronograma/presentation/pages/Cronograma/cronograma_page.dart';
 import 'package:cronograma/presentation/pages/turma/turma_page.dart';
 import 'package:flutter/material.dart';
 import 'package:cronograma/presentation/pages/cursos/curso_page_form.dart';

@@ -1,5 +1,3 @@
-// ignore_for_file: unrelated_type_equality_checks
-
 import 'package:cronograma/data/models/cursos_model.dart';
 import 'package:cronograma/data/models/instrutores_model.dart';
 import 'package:cronograma/data/models/turma_model.dart';
@@ -227,7 +225,22 @@ class _EditTurmaPageState extends State<EditTurmaPage> {
                         items: widget.instrutores.map((instrutor) {
                           return DropdownMenuItem<int>(
                             value: instrutor.idInstrutor,
-                            child: Text(instrutor.nomeInstrutor),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.start,
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                Text(instrutor.nomeInstrutor),
+                                const SizedBox(width: 8),
+                                if (instrutor.especializacao != null)
+                                  Text(
+                                    '- ${instrutor.especializacao!}',
+                                    style: const TextStyle(
+                                      fontSize: 14,
+                                      color: Colors.black,
+                                    ),
+                                  ),
+                              ],
+                            ),
                           );
                         }).toList(),
                         onChanged: (int? value) {

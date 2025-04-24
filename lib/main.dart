@@ -1,5 +1,5 @@
 import 'dart:io';
-import 'package:cronograma/presentation/pages/cronograma_page.dart';
+import 'package:cronograma/presentation/pages/Cronograma/cronograma_page.dart';
 import 'package:cronograma/presentation/pages/main_home_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';

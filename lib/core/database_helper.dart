@@ -4,7 +4,7 @@ import 'package:intl/intl.dart';
 
 class DatabaseHelper {
   static const _databaseName = 'education_database.db';
-  static const _databaseVersion = 3;
+  static const _databaseVersion = 4; // Aumentei a versão para 4
 
   // Singleton instance
   static final DatabaseHelper instance = DatabaseHelper._internal();
@@ -105,6 +105,7 @@ class DatabaseHelper {
         horario TEXT NOT NULL,
         status TEXT DEFAULT 'Agendada',
         observacoes TEXT,
+        horas INTEGER DEFAULT 1,
         FOREIGN KEY (idUc) REFERENCES Unidades_Curriculares(idUc),
         FOREIGN KEY (idTurma) REFERENCES Turma(idTurma)
       );
@@ -131,7 +132,6 @@ class DatabaseHelper {
     }
 
     if (oldVersion < 3) {
-      // Adiciona a nova coluna cargahoraria na tabela Unidades_Curriculares
       try {
         await db.execute(
             'ALTER TABLE Unidades_Curriculares ADD COLUMN cargahoraria INTEGER DEFAULT 0');
@@ -139,7 +139,16 @@ class DatabaseHelper {
         // Ignora se a coluna já existir
       }
     }
+
+    if (oldVersion < 4) {
+      try {
+        await db.execute('ALTER TABLE Aulas ADD COLUMN horas INTEGER DEFAULT 1');
+      } catch (e) {
+        // Ignora se a coluna já existir
+      }
+    }
   }
+
 
   Future<void> _insertInitialData(Database db) async {
     await db.insert('Turno', {'turno': 'Matutino'});
@@ -185,7 +194,7 @@ class DatabaseHelper {
     }).toList();
   }
 
-  Future<int> insertAula(Map<String, dynamic> aula) async {
+   Future<int> insertAula(Map<String, dynamic> aula) async {
     final db = await database;
 
     if (aula['data'] is String && (aula['data'] as String).contains('/')) {
@@ -195,8 +204,12 @@ class DatabaseHelper {
       }
     }
 
+    // Garante que o campo horas tenha um valor padrão se não foi fornecido
+    aula['horas'] = aula['horas'] ?? 1;
+
     return await db.insert('Aulas', aula);
   }
+
 
   Future<int> updateAula(Map<String, dynamic> aula) async {
     final db = await database;
