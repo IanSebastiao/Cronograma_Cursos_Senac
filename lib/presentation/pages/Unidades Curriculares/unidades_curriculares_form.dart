@@ -27,7 +27,9 @@ class _CadastroUnidadesCurricularesPageState
   bool _isLoading = false;
   List<Cursos> _cursos = [];
   Cursos? _cursoSelecionado;
+  Cursos? _cursoFiltroSelecionado; // Novo campo para o filtro
   List<UnidadesCurriculares> _unidadesCurriculares = [];
+  List<UnidadesCurriculares> _unidadesFiltradas = []; // Lista filtrada
   int? _ucParaExcluir;
   bool _mostrarConfirmacaoExclusao = false;
 
@@ -50,7 +52,9 @@ class _CadastroUnidadesCurricularesPageState
           // Inicializa com o primeiro curso se disponível
           if (_cursos.isNotEmpty && _cursoSelecionado == null) {
             _cursoSelecionado = _cursos.first;
+            _cursoFiltroSelecionado = _cursos.first;
           }
+          _aplicarFiltro(); // Aplica o filtro após carregar os dados
         });
       }
     } catch (e) {
@@ -63,6 +67,17 @@ class _CadastroUnidadesCurricularesPageState
       if (mounted) {
         setState(() => _isLoading = false);
       }
+    }
+  }
+
+  // Método para aplicar o filtro
+  void _aplicarFiltro() {
+    if (_cursoFiltroSelecionado == null) {
+      _unidadesFiltradas = List.from(_unidadesCurriculares);
+    } else {
+      _unidadesFiltradas = _unidadesCurriculares
+          .where((uc) => uc.idcurso == _cursoFiltroSelecionado!.idCurso)
+          .toList();
     }
   }
 
@@ -329,16 +344,56 @@ class _CadastroUnidadesCurricularesPageState
                   ),
                 ),
                 const SizedBox(height: 16),
+                // Adicionando o filtro de cursos
+                Card(
+                  elevation: 4,
+                  margin: const EdgeInsets.only(bottom: 16),
+                  child: Padding(
+                    padding: const EdgeInsets.all(12.0),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.filter_alt),
+                        const SizedBox(width: 8),
+                        const Text('Filtrar por curso:'),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: DropdownButton<Cursos>(
+                            value: _cursoFiltroSelecionado,
+                            isExpanded: true,
+                            items: [
+                              const DropdownMenuItem<Cursos>(
+                                value: null,
+                                child: Text('Todos os cursos'),
+                              ),
+                              ..._cursos.map((curso) {
+                                return DropdownMenuItem<Cursos>(
+                                  value: curso,
+                                  child: Text(curso.nomeCurso),
+                                );
+                              }),
+                            ],
+                            onChanged: (Cursos? novoValor) {
+                              setState(() {
+                                _cursoFiltroSelecionado = novoValor;
+                                _aplicarFiltro();
+                              });
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
                 _isLoading
                     ? const CircularProgressIndicator()
-                    : _unidadesCurriculares.isEmpty
+                    : _unidadesFiltradas.isEmpty
                         ? const Text('Nenhuma unidade curricular cadastrada')
                         : ListView.builder(
                             shrinkWrap: true,
                             physics: const NeverScrollableScrollPhysics(),
-                            itemCount: _unidadesCurriculares.length,
+                            itemCount: _unidadesFiltradas.length,
                             itemBuilder: (context, index) {
-                              final uc = _unidadesCurriculares[index];
+                              final uc = _unidadesFiltradas[index];
                               final curso = _cursos.firstWhere(
                                 (c) => c.idCurso == uc.idcurso,
                                 orElse: () => const Cursos(
