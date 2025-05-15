@@ -26,7 +26,7 @@ class TurmaComNomes {
     return TurmaComNomes(
       idTurma: Turma.safeParseInt(map['idTurma']),
       turma: map['turma']?.toString().trim() ?? '[Sem nome]',
-      idcurso: Turma.safeParseInt(map['idcurso']),
+      idcurso: Turma.safeParseInt(map['idCurso']),
       nomeCurso: map['nome_curso']?.toString().trim() ?? '[Sem nome]',
       idturno: Turma.safeParseInt(map['idturno']) ?? 1,
       idinstrutor: Turma.safeParseInt(map['idinstrutor']) ?? 0,

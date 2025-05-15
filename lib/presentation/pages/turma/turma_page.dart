@@ -15,16 +15,6 @@ import 'package:cronograma/presentation/viewmodels/turma_viewmodels.dart';
 import 'package:cronograma/presentation/viewmodels/turno_viewmodels.dart';
 import 'package:flutter/material.dart';
 
-// Extensão para busca segura
-extension FirstWhereOrNullExtension<T> on Iterable<T> {
-  T? firstWhereOrNull(bool Function(T) test) {
-    for (var element in this) {
-      if (test(element)) return element;
-    }
-    return null;
-  }
-}
-
 class TurmaPageForm extends StatefulWidget {
   const TurmaPageForm({super.key});
 
@@ -43,6 +33,7 @@ class _TurmaPageFormState extends State<TurmaPageForm> {
 
   bool _isLoading = false;
   List<TurmaComNomes> _turmaNomes = [];
+  List<TurmaComNomes> _turmasFiltradas = [];
   final List<String> _turnos = ['Matutino', 'Vespertino', 'Noturno'];
   String? _turnoSelecionado;
   int? _cursoIdSelecionado;
@@ -51,6 +42,7 @@ class _TurmaPageFormState extends State<TurmaPageForm> {
   bool _mostrarConfirmacaoExclusao = false;
   List<Cursos> _cursos = [];
   List<Instrutores> _instrutores = [];
+  Cursos? _cursoFiltroSelecionado;
 
   @override
   void initState() {
@@ -71,20 +63,24 @@ class _TurmaPageFormState extends State<TurmaPageForm> {
           _cursos = cursos;
           _instrutores = instrutores;
 
-          // Debug para verificar os dados carregados
-          debugPrint('Turmas carregadas: ${_turmaNomes.length}');
-          debugPrint('Cursos carregados: ${_cursos.length}');
-          debugPrint('Instrutores carregados: ${_instrutores.length}');
+          // Debug para verificar os dados
+          debugPrint(
+              'Cursos carregados: ${_cursos.map((c) => '${c.idCurso}:${c.nomeCurso}').toList()}');
+          debugPrint(
+              'Turmas carregadas: ${_turmaNomes.map((t) => '${t.idcurso}:${t.nomeCurso}').toList()}');
 
           if (_cursos.isNotEmpty) {
-            _cursoIdSelecionado ??= _cursos.first.idCurso;
+            _cursoIdSelecionado = _cursos.first.idCurso;
+            _cursoFiltroSelecionado = _cursos.first;
           }
           if (_instrutores.isNotEmpty) {
-            _instrutorIdSelecionado ??= _instrutores.first.idInstrutor;
+            _instrutorIdSelecionado = _instrutores.first.idInstrutor;
           }
           if (_turnos.isNotEmpty) {
-            _turnoSelecionado ??= _turnos.first;
+            _turnoSelecionado = _turnos.first;
           }
+
+          _aplicarFiltro();
         });
       }
     } catch (e) {
@@ -101,6 +97,24 @@ class _TurmaPageFormState extends State<TurmaPageForm> {
       if (mounted) {
         setState(() => _isLoading = false);
       }
+    }
+  }
+
+  void _aplicarFiltro() {
+    try {
+      if (_cursoFiltroSelecionado == null) {
+        _turmasFiltradas = List.from(_turmaNomes);
+      } else {
+        _turmasFiltradas = _turmaNomes
+            .where((turma) => turma.idcurso == _cursoFiltroSelecionado?.idCurso)
+            .toList();
+      }
+      debugPrint(
+          'Filtro aplicado - Curso: ${_cursoFiltroSelecionado?.idCurso}');
+      debugPrint('Turmas encontradas: ${_turmasFiltradas.length}');
+    } catch (e) {
+      debugPrint('Erro ao filtrar: $e');
+      _turmasFiltradas = [];
     }
   }
 
@@ -123,10 +137,7 @@ class _TurmaPageFormState extends State<TurmaPageForm> {
     try {
       final turnoId =
           await _turnoViewModel.getTurnoIdByNome(_turnoSelecionado!);
-
-      if (turnoId == null) {
-        throw Exception('Turno não encontrado');
-      }
+      if (turnoId == null) throw Exception('Turno não encontrado');
 
       final turma = Turma(
         turma: _turmaController.text,
@@ -165,10 +176,6 @@ class _TurmaPageFormState extends State<TurmaPageForm> {
   }
 
   Future<void> _editarTurma(Turma turma) async {
-    debugPrint('Editando turma ID: ${turma.idTurma}');
-    debugPrint('Curso ID: ${turma.idcurso}');
-    debugPrint('Instrutor ID: ${turma.idinstrutor}');
-
     final result = await Navigator.push<bool>(
       context,
       MaterialPageRoute(
@@ -359,13 +366,10 @@ class _TurmaPageFormState extends State<TurmaPageForm> {
                               return DropdownMenuItem<int>(
                                 value: instrutor.idInstrutor,
                                 child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.start,
-                                  crossAxisAlignment: CrossAxisAlignment.end,
                                   children: [
                                     Text(instrutor.nomeInstrutor),
-                                    const SizedBox(width: 8),
                                     if (instrutor.especializacao != null)
-                                      Text('- ${instrutor.especializacao!}'),
+                                      Text(' - ${instrutor.especializacao!}'),
                                   ],
                                 ),
                               );
@@ -404,25 +408,10 @@ class _TurmaPageFormState extends State<TurmaPageForm> {
                                 elevation: 4,
                               ),
                               child: _isLoading
-                                  ? const SizedBox(
-                                      width: 24,
-                                      height: 24,
-                                      child: CircularProgressIndicator(
-                                        color: Colors.white,
-                                        strokeWidth: 3,
-                                      ),
+                                  ? const CircularProgressIndicator(
+                                      color: Colors.white,
                                     )
-                                  : const Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Icon(Icons.save, size: 24),
-                                        SizedBox(width: 8),
-                                        Text(
-                                          'Salvar Turma',
-                                          style: TextStyle(fontSize: 18),
-                                        ),
-                                      ],
-                                    ),
+                                  : const Text('Salvar Turma'),
                             ),
                           ),
                         ],
@@ -439,18 +428,56 @@ class _TurmaPageFormState extends State<TurmaPageForm> {
                   ),
                 ),
                 const SizedBox(height: 16),
+                // Filtro por curso
+                Card(
+                  elevation: 4,
+                  margin: const EdgeInsets.only(bottom: 16),
+                  child: Padding(
+                    padding: const EdgeInsets.all(12.0),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.filter_alt),
+                        const SizedBox(width: 8),
+                        const Text('Filtrar por curso:'),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: DropdownButton<Cursos>(
+                            value: _cursoFiltroSelecionado,
+                            isExpanded: true,
+                            items: [
+                              const DropdownMenuItem<Cursos>(
+                                value: null,
+                                child: Text('Todos os cursos'),
+                              ),
+                              ..._cursos.map((curso) {
+                                return DropdownMenuItem<Cursos>(
+                                  value: curso,
+                                  child: Text(curso.nomeCurso),
+                                );
+                              })
+                            ],
+                            onChanged: (Cursos? novoValor) {
+                              setState(() {
+                                _cursoFiltroSelecionado = novoValor;
+                                _aplicarFiltro();
+                              });
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
                 _isLoading
                     ? const CircularProgressIndicator()
-                    : _turmaNomes.isEmpty
+                    : _turmasFiltradas.isEmpty
                         ? const Text('Nenhuma turma cadastrada')
                         : ListView.builder(
                             shrinkWrap: true,
                             physics: const NeverScrollableScrollPhysics(),
-                            itemCount: _turmaNomes.length,
+                            itemCount: _turmasFiltradas.length,
                             itemBuilder: (context, index) {
-                              final turma = _turmaNomes[index];
-                              final turno = turma.turno;
-
+                              final turma = _turmasFiltradas[index];
                               return Card(
                                 margin: const EdgeInsets.symmetric(vertical: 8),
                                 child: ListTile(
@@ -461,7 +488,7 @@ class _TurmaPageFormState extends State<TurmaPageForm> {
                                     children: [
                                       Text('Curso: ${turma.nomeCurso}'),
                                       Text('Instrutor: ${turma.nomeInstrutor}'),
-                                      Text('Turno: $turno '),
+                                      Text('Turno: ${turma.turno}'),
                                     ],
                                   ),
                                   trailing: Row(
@@ -476,8 +503,6 @@ class _TurmaPageFormState extends State<TurmaPageForm> {
                                           idcurso: turma.idcurso,
                                           idturno: turma.idturno,
                                           idinstrutor: turma.idinstrutor,
-                                          idUnidadeCurricular:
-                                              turma.idUnidadeCurricular,
                                         )),
                                       ),
                                       if (_mostrarConfirmacaoExclusao &&
@@ -494,7 +519,7 @@ class _TurmaPageFormState extends State<TurmaPageForm> {
                                               tween: IntTween(begin: 5, end: 0),
                                               duration:
                                                   const Duration(seconds: 5),
-                                              builder: (context, value, child) {
+                                              builder: (context, value, _) {
                                                 return Text('$value');
                                               },
                                             ),
@@ -512,7 +537,7 @@ class _TurmaPageFormState extends State<TurmaPageForm> {
                                 ),
                               );
                             },
-                          )
+                          ),
               ],
             ),
           ),
