@@ -21,9 +21,12 @@ class _CronogramaPageState extends State<CronogramaPage> {
   final Set<DateTime> _selectedDays = {};
   CalendarFormat _calendarFormat = CalendarFormat.month;
   final Map<DateTime, List<Aula>> _events = {};
+  final Map<DateTime, List<Aula>> _filteredEvents = {};
   final Map<DateTime, String> _feriados = {};
   bool _isLoading = true;
   final Map<int, int> _cargaHorariaUc = {};
+  List<Map<String, dynamic>> _turmas = [];
+  int? _selectedTurmaId;
 
   final Map<String, Map<String, dynamic>> _periodoConfig = {
     'Matutino': {
@@ -50,8 +53,24 @@ class _CronogramaPageState extends State<CronogramaPage> {
     _focusedDay = now;
     _selectedDay = now;
     _carregarFeriadosBrasileiros(now.year);
-    _carregarAulas();
+    _carregarTurmas().then((_) => _carregarAulas());
     _carregarCargaHorariaUc();
+  }
+
+  Future<void> _carregarTurmas() async {
+    try {
+      final db = await DatabaseHelper.instance.database;
+      final turmas = await db.query('Turma');
+      setState(() {
+        _turmas = turmas;
+      });
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erro ao carregar turmas: $e')),
+        );
+      }
+    }
   }
 
   Future<void> _carregarFeriadosBrasileiros(int ano) async {
@@ -117,6 +136,7 @@ class _CronogramaPageState extends State<CronogramaPage> {
         setState(() {
           _events.clear();
           _events.addAll(events);
+          _aplicarFiltroTurma();
           _isLoading = false;
         });
       }
@@ -126,6 +146,25 @@ class _CronogramaPageState extends State<CronogramaPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Erro ao carregar aulas: $e')),
         );
+      }
+    }
+  }
+
+  void _aplicarFiltroTurma() {
+    _filteredEvents.clear();
+
+    if (_selectedTurmaId == null) {
+      _filteredEvents.addAll(_events);
+      return;
+    }
+
+    for (var entry in _events.entries) {
+      final filteredAulas = entry.value
+          .where((aula) => aula.idTurma == _selectedTurmaId)
+          .toList();
+
+      if (filteredAulas.isNotEmpty) {
+        _filteredEvents[entry.key] = filteredAulas;
       }
     }
   }
@@ -197,7 +236,6 @@ class _CronogramaPageState extends State<CronogramaPage> {
       );
 
       if (result == true) {
-        // Recarrega os dados se as aulas foram salvas com sucesso
         await _carregarAulas();
         await _carregarCargaHorariaUc();
 
@@ -276,7 +314,11 @@ class _CronogramaPageState extends State<CronogramaPage> {
   }
 
   List<Aula> _getEventsForDay(DateTime day) {
-    return _events[DateTime(day.year, day.month, day.day)] ?? [];
+    if (_selectedTurmaId == null) {
+      return _events[DateTime(day.year, day.month, day.day)] ?? [];
+    } else {
+      return _filteredEvents[DateTime(day.year, day.month, day.day)] ?? [];
+    }
   }
 
   String? _getFeriadoForDay(DateTime day) {
@@ -286,7 +328,6 @@ class _CronogramaPageState extends State<CronogramaPage> {
   Widget _buildEventList() {
     if (_selectedDay == null && _selectedDays.isEmpty) return const SizedBox();
 
-    // Se apenas um dia está selecionado
     if (_selectedDay != null && _selectedDays.isEmpty) {
       final events = _getEventsForDay(_selectedDay!);
       final feriado = _getFeriadoForDay(_selectedDay!);
@@ -294,7 +335,6 @@ class _CronogramaPageState extends State<CronogramaPage> {
       return _buildDayEvents(_selectedDay!, events, feriado);
     }
 
-    // Se múltiplos dias estão selecionados
     return ListView(
       children: _selectedDays.map((day) {
         final events = _getEventsForDay(day);
@@ -450,6 +490,8 @@ class _CronogramaPageState extends State<CronogramaPage> {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Cronograma de Aulas'),
@@ -497,6 +539,43 @@ class _CronogramaPageState extends State<CronogramaPage> {
           ? const Center(child: CircularProgressIndicator())
           : Column(
               children: [
+                // Filtro por Turma
+                Padding(
+                  padding: const EdgeInsets.all(12.0),
+                  child: DropdownButtonFormField<int>(
+                    isExpanded: true,
+                    value: _selectedTurmaId,
+                    decoration: InputDecoration(
+                      labelText: 'Filtrar por Turma',
+                      prefixIcon:
+                          Icon(Icons.filter_list, color: colorScheme.primary),
+                      border: const OutlineInputBorder(),
+                      contentPadding: const EdgeInsets.symmetric(
+                        vertical: 16,
+                        horizontal: 12,
+                      ),
+                    ),
+                    items: [
+                      const DropdownMenuItem<int>(
+                        value: null,
+                        child: Text('Todas as Turmas'),
+                      ),
+                      ..._turmas.map((turma) {
+                        return DropdownMenuItem<int>(
+                          value: turma['idTurma'] as int,
+                          child: Text(turma['turma'] as String),
+                        );
+                      }).toList(),
+                    ],
+                    onChanged: (value) {
+                      setState(() {
+                        _selectedTurmaId = value;
+                        _aplicarFiltroTurma();
+                      });
+                    },
+                  ),
+                ),
+
                 TableCalendar(
                   firstDay: DateTime.utc(2020, 1, 1),
                   lastDay: DateTime.utc(2030, 12, 31),
@@ -509,7 +588,6 @@ class _CronogramaPageState extends State<CronogramaPage> {
                     setState(() {
                       _focusedDay = focusedDay;
 
-                      // Verifica se Shift ou Ctrl está pressionado (para multi-seleção)
                       final isShiftPressed = HardwareKeyboard
                           .instance.logicalKeysPressed
                           .any((key) =>
@@ -522,15 +600,13 @@ class _CronogramaPageState extends State<CronogramaPage> {
                               key == LogicalKeyboardKey.controlRight);
 
                       if (isShiftPressed || isCtrlPressed) {
-                        // Modo de seleção múltipla
                         if (_selectedDays.contains(selectedDay)) {
                           _selectedDays.remove(selectedDay);
                         } else {
                           _selectedDays.add(selectedDay);
                         }
-                        _selectedDay = null; // Limpa seleção única
+                        _selectedDay = null;
                       } else {
-                        // Modo de visualização (seleção única)
                         _selectedDays.clear();
                         _selectedDay = selectedDay;
                       }
