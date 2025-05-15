@@ -119,22 +119,26 @@ class _AgendarAulasPageState extends State<AgendarAulasPage> {
                           ),
                         ),
                         const SizedBox(height: 12),
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
-                          children: widget.selectedDays.map((day) {
-                            return Chip(
-                              label: Text(DateFormat('EEEE, dd/MM', 'pt_BR')
-                                  .format(day)),
-                              deleteIcon: const Icon(Icons.close, size: 16),
-                              onDeleted: () {
-                                setState(() {
-                                  widget.selectedDays.remove(day);
-                                });
-                              },
-                              backgroundColor: colorScheme.primaryContainer,
-                            );
-                          }).toList(),
+                        SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: Row(
+                            children: widget.selectedDays.map((day) {
+                              return Padding(
+                                padding: const EdgeInsets.only(right: 8.0),
+                                child: Chip(
+                                  label: Text(DateFormat('EEEE, dd/MM', 'pt_BR')
+                                      .format(day)),
+                                  deleteIcon: const Icon(Icons.close, size: 16),
+                                  onDeleted: () {
+                                    setState(() {
+                                      widget.selectedDays.remove(day);
+                                    });
+                                  },
+                                  backgroundColor: colorScheme.primaryContainer,
+                                ),
+                              );
+                            }).toList(),
+                          ),
                         ),
                         const SizedBox(height: 8),
                         Text(
@@ -208,6 +212,7 @@ class _AgendarAulasPageState extends State<AgendarAulasPage> {
                         // Dropdown de Unidade Curricular
                         if (_selectedTurmaId != null) ...[
                           DropdownButtonFormField<int>(
+                            isExpanded: true,
                             value: _selectedUcId,
                             decoration: InputDecoration(
                               labelText: 'Unidade Curricular',
@@ -218,38 +223,60 @@ class _AgendarAulasPageState extends State<AgendarAulasPage> {
                                 borderSide:
                                     BorderSide(color: colorScheme.primary),
                               ),
+                              contentPadding: const EdgeInsets.symmetric(
+                                vertical: 12,
+                                horizontal: 12,
+                              ),
                             ),
+
+                            // <<< aqui: controla o que aparece no campo quando um item está selecionado
+                            selectedItemBuilder: (_) {
+                              return _ucsFiltradas.map((uc) {
+                                return Text(
+                                  uc['nome_uc'] as String,
+                                  softWrap: true,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.visible,
+                                  style: const TextStyle(fontSize: 14),
+                                );
+                              }).toList();
+                            },
+
                             items: _ucsFiltradas.map((uc) {
                               final cargaHoraria =
                                   _cargaHorariaUc[uc['idUc'] as int] ?? 0;
                               return DropdownMenuItem<int>(
                                 value: uc['idUc'] as int,
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.start,
-                                  crossAxisAlignment: CrossAxisAlignment.end,
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  mainAxisSize: MainAxisSize.min,
                                   children: [
+                                    // aqui continua mostrando nome + horas
                                     Text(
                                       uc['nome_uc'] as String,
-                                      overflow: TextOverflow.ellipsis,
-                                      maxLines: 1,
+                                      softWrap: true,
+                                      maxLines: 2,
+                                      overflow: TextOverflow.visible,
+                                      style: const TextStyle(fontSize: 14),
                                     ),
-                                    const SizedBox(width: 8),
+                                    const SizedBox(height: 4),
                                     Text(
-                                      '- $cargaHoraria horas restantes',
+                                      '$cargaHoraria horas restantes',
                                       style: TextStyle(
                                         color: cargaHoraria < _horasAula
                                             ? Colors.red
-                                            : Colors.black,
+                                            : Colors.grey[600],
+                                        fontSize: 12,
                                       ),
                                     ),
                                   ],
                                 ),
                               );
                             }).toList(),
+
                             onChanged: (value) {
-                              if (mounted) {
+                              if (mounted)
                                 setState(() => _selectedUcId = value);
-                              }
                             },
                             validator: (value) => value == null
                                 ? 'Selecione uma unidade curricular'
@@ -317,7 +344,9 @@ class _AgendarAulasPageState extends State<AgendarAulasPage> {
                                 value: _horasAula.toDouble(),
                                 min: 1,
                                 max: maxHoras.toDouble(),
-                                divisions: maxHoras - 1,
+                                divisions: maxHoras > 1
+                                    ? maxHoras - 1
+                                    : 1, // Prevenir divisões zero
                                 label:
                                     '$_horasAula hora${_horasAula > 1 ? 's' : ''}',
                                 onChanged: (value) {
@@ -340,6 +369,7 @@ class _AgendarAulasPageState extends State<AgendarAulasPage> {
                 // Resumo e Botão de Salvar
                 if (_selectedUcId != null) ...[
                   const SizedBox(height: 24),
+                  // No Card do resumo, altere para:
                   Card(
                     elevation: 8,
                     shape: RoundedRectangleBorder(
@@ -347,33 +377,39 @@ class _AgendarAulasPageState extends State<AgendarAulasPage> {
                     ),
                     child: Padding(
                       padding: const EdgeInsets.all(16.0),
-                      child: Column(
-                        children: [
-                          ListTile(
-                            leading:
-                                Icon(Icons.info, color: colorScheme.primary),
-                            title: Text(
-                              'Resumo do Agendamento',
-                              style: theme.textTheme.titleMedium?.copyWith(
-                                color: colorScheme.primary,
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(
+                          maxWidth: MediaQuery.of(context).size.width * 0.9,
+                        ),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            ListTile(
+                              leading:
+                                  Icon(Icons.info, color: colorScheme.primary),
+                              title: Text(
+                                'Resumo do Agendamento',
+                                style: theme.textTheme.titleMedium?.copyWith(
+                                  color: colorScheme.primary,
+                                ),
                               ),
                             ),
-                          ),
-                          const Divider(),
-                          _buildInfoRow('Período:', _periodo, theme),
-                          _buildInfoRow(
-                              'Horas por aula:', '$_horasAula', theme),
-                          _buildInfoRow('Total de aulas:',
-                              '${widget.selectedDays.length}', theme),
-                          _buildInfoRow(
-                              'Total de horas:',
-                              '${_horasAula * widget.selectedDays.length}',
-                              theme,
-                              isBold: true),
-                          _buildInfoRow('Carga horária restante:',
-                              '$_cargaHorariaRestante horas', theme,
-                              isAlert: _cargaHorariaRestante < 0),
-                        ],
+                            const Divider(),
+                            _buildInfoRow('Período:', _periodo, theme),
+                            _buildInfoRow(
+                                'Horas por aula:', '$_horasAula', theme),
+                            _buildInfoRow('Total de aulas:',
+                                '${widget.selectedDays.length}', theme),
+                            _buildInfoRow(
+                                'Total de horas:',
+                                '${_horasAula * widget.selectedDays.length}',
+                                theme,
+                                isBold: true),
+                            _buildInfoRow('Carga horária restante:',
+                                '$_cargaHorariaRestante horas', theme,
+                                isAlert: _cargaHorariaRestante < 0),
+                          ],
+                        ),
                       ),
                     ),
                   ),
@@ -423,24 +459,34 @@ class _AgendarAulasPageState extends State<AgendarAulasPage> {
     );
   }
 
+  // No método _buildInfoRow, altere para:
   Widget _buildInfoRow(String label, String value, ThemeData theme,
       {bool isBold = false, bool isAlert = false}) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start, // Adicionado
         children: [
-          Text(
-            label,
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: Colors.grey.shade700,
+          SizedBox(
+            width: 150, // Largura fixa para labels
+            child: Text(
+              label,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: Colors.grey.shade700,
+              ),
             ),
           ),
-          const Spacer(),
-          Text(
-            value,
-            style: theme.textTheme.bodyMedium?.copyWith(
-              fontWeight: isBold ? FontWeight.bold : FontWeight.normal,
-              color: isAlert ? Colors.red : null,
+          const SizedBox(width: 16),
+          Expanded(
+            // Adicionado Expanded
+            child: Text(
+              value,
+              maxLines: 2, // Permite até 2 linhas
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                fontWeight: isBold ? FontWeight.bold : FontWeight.normal,
+                color: isAlert ? Colors.red : null,
+              ),
             ),
           ),
         ],
